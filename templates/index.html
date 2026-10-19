@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Traffic Tracker — Анализ трафика конкурентов</title>
+  <style>
+    /* ── Reset & Base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #f0f4ff;
+      color: #1e293b;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 60%, #3b82f6 100%);
+      color: #fff;
+      padding: 24px 32px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      box-shadow: 0 4px 20px rgba(37,99,235,.35);
+    }
+    header .logo { font-size: 2rem; }
+    header h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -.5px; }
+    header p  { font-size: .85rem; opacity: .85; margin-top: 2px; }
+
+    /* ── Layout ── */
+    .container { max-width: 1100px; margin: 32px auto; padding: 0 20px; }
+
+    /* ── Card ── */
+    .card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 28px 32px;
+      box-shadow: 0 2px 16px rgba(30,41,59,.08);
+      margin-bottom: 24px;
+    }
+    .card h2 { font-size: 1.1rem; font-weight: 700; margin-bottom: 16px; color: #1d4ed8; display: flex; align-items: center; gap: 8px; }
+
+    /* ── Input area ── */
+    .input-wrapper {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    textarea {
+      width: 100%;
+      min-height: 110px;
+      padding: 14px 16px;
+      border: 2px solid #e2e8f0;
+      border-radius: 10px;
+      font-size: .95rem;
+      resize: vertical;
+      transition: border-color .2s;
+      font-family: inherit;
+      color: #1e293b;
+    }
+    textarea:focus { outline: none; border-color: #2563eb; }
+
+    .btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
+
+    /* ── Buttons ── */
+    .btn {
+      padding: 10px 22px;
+      border: none;
+      border-radius: 8px;
+      font-size: .9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all .18s;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+    .btn-primary   { background: #2563eb; color: #fff; }
+    .btn-primary:hover   { background: #1d4ed8; transform: translateY(-1px); box-shadow: 0 4px 14px rgba(37,99,235,.4); }
+    .btn-success   { background: #16a34a; color: #fff; }
+    .btn-success:hover   { background: #15803d; transform: translateY(-1px); }
+    .btn-danger    { background: #dc2626; color: #fff; }
+    .btn-danger:hover    { background: #b91c1c; transform: translateY(-1px); }
+    .btn-secondary { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
+    .btn-secondary:hover { background: #e2e8f0; }
+    .btn:disabled  { opacity: .55; cursor: not-allowed; transform: none !important; }
+
+    /* ── Loader ── */
+    #loader {
+      display: none;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 18px;
+      background: #eff6ff;
+      border-radius: 10px;
+      border: 1px solid #bfdbfe;
+      color: #1d4ed8;
+      font-weight: 500;
+    }
+    .spinner {
+      width: 22px; height: 22px;
+      border: 3px solid #bfdbfe;
+      border-top-color: #2563eb;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Progress bar ── */
+    .progress-bar-wrap {
+      background: #e2e8f0;
+      border-radius: 999px;
+      height: 6px;
+      overflow: hidden;
+      margin-top: 8px;
+    }
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #2563eb, #3b82f6);
+      width: 0%;
+      transition: width .4s ease;
+      border-radius: 999px;
+    }
+
+    /* ── Results Table ── */
+    .results-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .badge {
+      background: #eff6ff;
+      color: #1d4ed8;
+      border: 1px solid #bfdbfe;
+      border-radius: 999px;
+      padding: 3px 12px;
+      font-size: .8rem;
+      font-weight: 600;
+    }
+
+    .table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid #e2e8f0; }
+    table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+    thead th {
+      background: #1d4ed8;
+      color: #fff;
+      padding: 12px 14px;
+      text-align: left;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    tbody tr { transition: background .15s; }
+    tbody tr:nth-child(even) { background: #f8faff; }
+    tbody tr:hover           { background: #eff6ff; }
+    tbody td { padding: 11px 14px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+
+    .domain-cell { font-weight: 600; color: #1d4ed8; }
+    .domain-cell a { color: inherit; text-decoration: none; }
+    .domain-cell a:hover { text-decoration: underline; }
+
+    /* Status badges */
+    .status-ok   { background:#dcfce7; color:#166534; padding:2px 8px; border-radius:999px; font-size:.78rem; font-weight:600; }
+    .status-warn { background:#fef9c3; color:#854d0e; padding:2px 8px; border-radius:999px; font-size:.78rem; font-weight:600; }
+    .status-err  { background:#fee2e2; color:#991b1b; padding:2px 8px; border-radius:999px; font-size:.78rem; font-weight:600; }
+
+    .visits-val { font-weight: 700; color: #1d4ed8; font-size: 1rem; }
+    .no-data    { color: #94a3b8; font-style: italic; }
+
+    /* Title truncate */
+    .title-cell { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* ── History section ── */
+    #history-section { display: none; }
+    .history-item {
+      border-left: 4px solid #2563eb;
+      padding: 10px 14px;
+      margin-bottom: 10px;
+      background: #f8faff;
+      border-radius: 0 8px 8px 0;
+      font-size: .85rem;
+    }
+    .history-item strong { color: #1d4ed8; }
+
+    /* ── Empty state ── */
+    .empty-state {
+      text-align: center;
+      padding: 50px 20px;
+      color: #94a3b8;
+    }
+    .empty-state .icon { font-size: 3rem; margin-bottom: 12px; }
+    .empty-state p { font-size: .95rem; }
+
+    /* ── Toast ── */
+    #toast {
+      position: fixed;
+      bottom: 28px; right: 28px;
+      background: #1e293b;
+      color: #fff;
+      padding: 12px 22px;
+      border-radius: 10px;
+      font-size: .88rem;
+      box-shadow: 0 4px 20px rgba(0,0,0,.3);
+      opacity: 0;
+      transition: opacity .3s;
+      z-index: 1000;
+      pointer-events: none;
+    }
+    #toast.show { opacity: 1; }
+
+    /* ── Responsive ── */
+    @media (max-width: 600px) {
+      header { padding: 16px; }
+      .card  { padding: 18px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">📊</div>
+  <div>
+    <h1>Traffic Tracker</h1>
+    <p>Анализ примерного трафика сайтов конкурентов</p>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- Input Card -->
+  <div class="card">
+    <h2>🔍 Анализ сайтов</h2>
+    <div class="input-wrapper">
+      <textarea id="urls-input"
+        placeholder="Введите URL сайтов конкурентов (по одному на строку):&#10;https://example.com&#10;competitor.ru&#10;another-site.com"></textarea>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="runAnalysis()" id="btn-analyze">
+          🚀 Анализировать
+        </button>
+        <button class="btn btn-success" onclick="exportExcel()" id="btn-export">
+          📥 Скачать Excel
+        </button>
+        <button class="btn btn-secondary" onclick="toggleHistory()" id="btn-history">
+          📋 История
+        </button>
+        <button class="btn btn-danger" onclick="clearData()" id="btn-clear">
+          🗑 Очистить
+        </button>
+      </div>
+      <div id="loader">
+        <div class="spinner"></div>
+        <span id="loader-text">Анализируем сайты…</span>
+      </div>
+      <div class="progress-bar-wrap" id="progress-wrap" style="display:none">
+        <div class="progress-bar" id="progress-bar"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Results Card -->
+  <div class="card" id="results-card" style="display:none">
+    <div class="results-header">
+      <h2>📈 Результаты</h2>
+      <span class="badge" id="results-count">0 сайтов</span>
+    </div>
+    <div class="table-wrap">
+      <table id="results-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Домен</th>
+            <th>Заголовок</th>
+            <th>HTTP</th>
+            <th>Ответ (мс)</th>
+            <th>Визитов / мес</th>
+            <th>Отказы</th>
+            <th>Трафик / день</th>
+            <th>Дата проверки</th>
+          </tr>
+        </thead>
+        <tbody id="results-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- History Card -->
+  <div class="card" id="history-section">
+    <h2>📋 История проверок</h2>
+    <div id="history-body">
+      <div class="empty-state">
+        <div class="icon">🕓</div>
+        <p>История пуста</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+  // ─── Utility ───────────────────────────────
+
+  function showToast(msg, duration = 3000) {
+    const t = document.getElementById("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    setTimeout(() => t.classList.remove("show"), duration);
+  }
+
+  function setLoading(on, text = "Анализируем сайты…") {
+    const loader = document.getElementById("loader");
+    const wrap   = document.getElementById("progress-wrap");
+    const btn    = document.getElementById("btn-analyze");
+    loader.style.display = on ? "flex" : "none";
+    wrap.style.display   = on ? "block" : "none";
+    btn.disabled = on;
+    document.getElementById("loader-text").textContent = text;
+  }
+
+  function animateProgress(duration) {
+    const bar = document.getElementById("progress-bar");
+    bar.style.width = "0%";
+    let start = null;
+    function step(ts) {
+      if (!start) start = ts;
+      const pct = Math.min(((ts - start) / duration) * 90, 90);
+      bar.style.width = pct + "%";
+      if (pct < 90) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+
+  function statusBadge(code) {
+    if (!code) return '<span class="status-err">—</span>';
+    if (code >= 200 && code < 300) return `<span class="status-ok">${code}</span>`;
+    if (code >= 300 && code < 400) return `<span class="status-warn">${code}</span>`;
+    return `<span class="status-err">${code}</span>`;
+  }
+
+  function noData(val) {
+    if (!val || val === "—" || val === "Нет данных" || val === "null") {
+      return '<span class="no-data">нет данных</span>';
+    }
+    return val;
+  }
+
+  // ─── Render ────────────────────────────────
+
+  function renderResults(results) {
+    const tbody = document.getElementById("results-body");
+    tbody.innerHTML = "";
+
+    results.forEach((r, i) => {
+      const tr = document.createElement("tr");
+      const domain = r.domain || r.url || "—";
+      const visits = r.monthly_visits || r.error || "—";
+      const visitsHtml = (r.error)
+        ? `<span class="status-err">Ошибка</span>`
+        : `<span class="visits-val">${visits === "—" || visits === "Нет данных" ? '<span class="no-data">нет данных</span>' : visits}</span>`;
+
+      tr.innerHTML = `
+        <td>${i + 1}</td>
+        <td class="domain-cell"><a href="${r.url || '#'}" target="_blank">${domain}</a></td>
+        <td class="title-cell" title="${(r.title||'').replace(/"/g,'&quot;')}">${r.title || '<span class="no-data">—</span>'}</td>
+        <td>${statusBadge(r.status_code)}</td>
+        <td>${r.response_time_ms ? r.response_time_ms + ' мс' : '<span class="no-data">—</span>'}</td>
+        <td>${visitsHtml}</td>
+        <td>${noData(r.bounce_rate)}</td>
+        <td>${noData(r.traffic_day)}</td>
+        <td style="white-space:nowrap;font-size:.8rem;color:#64748b">${r.timestamp || '—'}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    document.getElementById("results-count").textContent = `${results.length} сайт(ов)`;
+    document.getElementById("results-card").style.display = "block";
+    document.getElementById("results-card").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  // ─── Actions ───────────────────────────────
+
+  async function runAnalysis() {
+    const raw = document.getElementById("urls-input").value.trim();
+    if (!raw) { showToast("⚠️ Введите хотя бы один URL"); return; }
+
+    const urls = raw.split("\n").map(u => u.trim()).filter(Boolean);
+    if (!urls.length) { showToast("⚠️ Не найдено URL для анализа"); return; }
+
+    setLoading(true, `Анализируем ${urls.length} сайт(ов)…`);
+    animateProgress(urls.length * 4000);
+
+    try {
+      const resp = await fetch("/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ urls })
+      });
+      const data = await resp.json();
+
+      document.getElementById("progress-bar").style.width = "100%";
+      setTimeout(() => setLoading(false), 400);
+
+      if (data.error) { showToast("❌ " + data.error); return; }
+      renderResults(data.results);
+      showToast(`✅ Проверено ${data.results.length} сайт(ов). Excel обновлён.`);
+    } catch (e) {
+      setLoading(false);
+      showToast("❌ Ошибка соединения: " + e.message);
+    }
+  }
+
+  async function exportExcel() {
+    showToast("📥 Подготовка файла…");
+    window.location.href = "/export";
+  }
+
+  async function clearData() {
+    if (!confirm("Очистить всю историю проверок?")) return;
+    await fetch("/clear", { method: "POST" });
+    document.getElementById("results-body").innerHTML = "";
+    document.getElementById("results-card").style.display = "none";
+    document.getElementById("history-body").innerHTML = `
+      <div class="empty-state"><div class="icon">🕓</div><p>История пуста</p></div>`;
+    showToast("🗑 История очищена");
+  }
+
+  async function toggleHistory() {
+    const sec = document.getElementById("history-section");
+    if (sec.style.display === "block") {
+      sec.style.display = "none"; return;
+    }
+    sec.style.display = "block";
+    sec.scrollIntoView({ behavior: "smooth" });
+
+    const resp = await fetch("/history");
+    const history = await resp.json();
+    const body = document.getElementById("history-body");
+
+    if (!history.length) {
+      body.innerHTML = `<div class="empty-state"><div class="icon">🕓</div><p>История пуста</p></div>`;
+      return;
+    }
+
+    body.innerHTML = [...history].reverse().slice(0, 50).map(r => `
+      <div class="history-item">
+        <strong>${r.domain || r.url}</strong> —
+        визитов/мес: <strong>${r.monthly_visits || '—'}</strong> |
+        HTTP: ${r.status_code || '—'} |
+        <span style="color:#64748b">${r.timestamp}</span>
+      </div>
+    `).join("");
+  }
+
+  // ─── Enter to analyze ──────────────────────
+  document.addEventListener("keydown", e => {
+    if (e.ctrlKey && e.key === "Enter") runAnalysis();
+  });
+</script>
+</body>
+</html>
