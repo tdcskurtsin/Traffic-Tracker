@@ -56,21 +56,3 @@ jobs:
           name: TrafficTracker-Windows
           path: dist/TrafficTracker.exe
           retention-days: 30
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v1.0.${{ github.run_number }}
-          name: "TrafficTracker v1.0.${{ github.run_number }}"
-          body: |
-            ## 📊 Traffic Tracker — Windows EXE
-
-            ### Как использовать:
-            1. Скачайте `TrafficTracker.exe`
-            2. Дважды кликните по файлу
-            3. Откроется браузер на `http://127.0.0.1:8080`
-          files: dist/TrafficTracker.exe
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
